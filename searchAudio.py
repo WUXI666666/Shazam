@@ -8,6 +8,7 @@ from scipy import ndimage
 import pickle
 from fingerprint import createfingerprint, createhashes
 import glob
+from record import recordaudio
 # 指纹提取参数
 dist_freq = 11
 dist_time = 7
@@ -86,8 +87,8 @@ def compute_matching_function(C_D, C_Q, tol_freq=1, tol_time=1):
 
 # 加载数据的函数
 def load_database():
-    with open('server_tables.pkl', 'rb') as f:
-        server_tables = pickle.load(f)
+    with open('server_tables.pkl', 'rb') as f:#with用于上下文管理，确保文件在使用完毕后自动关闭。
+        server_tables = pickle.load(f)#反序列化
     with open('offset_times.pkl', 'rb') as f:
         offset_times = pickle.load(f)
     with open('song_names.pkl', 'rb') as f:
@@ -101,12 +102,13 @@ def comparetables(table):
     hist_list = np.zeros((len(server_tables), 1))
     for h in range(len(server_tables)):
         matched_pairs = 0
-        add_to_hist = []
-        for i in range(513):
+        add_to_hist = []#偏移时间
+        for i in range(513):#遍历每个频率位置
             if table[i]:
-                for j in table[i]:
+                for j in table[i]:#每个频率的指纹
                     if j in server_tables[h][i]:
                         indices = [i for i, x in enumerate(server_tables[h][i]) if x == j]
+                        #enumerate 函数用于将这个列表生成一个枚举对象，每个元素都是一个 (索引, 值) 对。
                         matched_pairs += len(indices)
                         for o in indices:
                             add_to_hist.append(offset_times[h][i][o])
@@ -114,10 +116,10 @@ def comparetables(table):
         if add_to_hist:
             maxh = np.max(add_to_hist)
             hist, edges = np.histogram(add_to_hist, bins=range(0, (maxh + (maxh + 1) % 2050), 2050))
-            hist_list[h] = np.max(hist)
+            hist_list[h] = np.max(hist)#一个区间中最多匹配次数
     return matched_pairs_list, hist_list
 
-# 查找歌曲ID
+# 查找歌曲ID，通过衡量匹配比率和集中度，如果 max_hist 值高，说明在某个时间偏移上有大量的匹配，意味着在这个时间偏移上，两个音频的相似度非常高。
 def fetchID(fprint):
     matched_pairs, hists = comparetables(fprint)
     num_pairs = sum(map(len, fprint))
@@ -161,13 +163,17 @@ def fetchID(fprint):
 
 
 # 听歌识曲功能
-def recognize_song(query_path):
+def recognize_song_from_path(query_path):
     x, fs = librosa.load(query_path, sr=8192, mono=True)
     F_print = createfingerprint(x)
     T = createhashes(F_print, offset=False)
     song_name = fetchID(T)
     return song_name
-
+def recognize_song(x):
+    F_print = createfingerprint(x)
+    T = createhashes(F_print, offset=False)
+    song_name = fetchID(T)
+    return song_name
 # 比较两个音频文件
 def compare_2songs(path1, path2):
     Y1 = compute_spectrogram(path1)
@@ -201,7 +207,8 @@ def compare_dir(path, fn_query):
 # compare_2songs("./songs/NationalAnthemIndia.wav", "./tests/test_3.wav")
 
 # 听歌识曲
-song_name = recognize_song("./tests/test_3.wav")
+song_name = recognize_song_from_path("./tests/test_3.wav")
+# song_name=recognize_song (recordaudio())
 print(f"Recognized song: {song_name}")
 
 plt.show()
